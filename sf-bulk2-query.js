@@ -1,6 +1,6 @@
-import fetch from 'node-fetch';
-import fs from 'fs';
-import StreamManager from './StreamManager.mjs';
+import fetch from "node-fetch";
+import fs from "fs";
+import StreamManager from "./StreamManager.js";
 
 export class SalesforceCredentials {
     constructor(username, password, securityToken, clientId, clientSecret) {
@@ -15,8 +15,8 @@ export class SalesforceCredentials {
 export class SalesforceBulkApiClient {
     // TODO migrate user, pass, token and client info into object/class
     constructor(
-        salesforceInstance = 'https://login.salesforce.com',
-        apiVersion = '58.0',
+        salesforceInstance = "https://login.salesforce.com",
+        apiVersion = "58.0",
         creds
     ) {
         this.salesforceInstance = salesforceInstance;
@@ -53,7 +53,7 @@ export class SalesforceBulkApiClient {
             !this.clientSecret
         ) {
             throw new Error(
-                'Username, password, securityToken, clientId, and clientSecret are all required.'
+                "Username, password, securityToken, clientId, and clientSecret are all required."
             );
         }
 
@@ -65,18 +65,18 @@ export class SalesforceBulkApiClient {
 
         // Prepare the request body (form-urlencoded)
         const params = new URLSearchParams();
-        params.append('grant_type', 'password');
-        params.append('client_id', this.clientId);
-        params.append('client_secret', this.clientSecret);
-        params.append('username', this.username);
-        params.append('password', fullPassword);
+        params.append("grant_type", "password");
+        params.append("client_id", this.clientId);
+        params.append("client_secret", this.clientSecret);
+        params.append("username", this.username);
+        params.append("password", fullPassword);
 
         try {
             // Make the POST request to the token endpoint
             const response = await fetch(tokenUrl, {
-                method: 'POST',
+                method: "POST",
                 headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
+                    "Content-Type": "application/x-www-form-urlencoded",
                 },
                 body: params,
             });
@@ -106,7 +106,7 @@ export class SalesforceBulkApiClient {
         if (!this.tokenType || !this.accessToken) {
             await this.login();
             if (!this.tokenType || !this.accessToken) {
-                throw new Error('Failed to obtain access token.');
+                throw new Error("Failed to obtain access token.");
             }
         }
         return `${this.tokenType} ${this.accessToken}`;
@@ -117,14 +117,14 @@ export class SalesforceBulkApiClient {
             const response = await fetch(
                 `${this.instanceUrl}/services/data/v${this.apiVersion}/jobs/query`,
                 {
-                    method: 'POST',
+                    method: "POST",
                     headers: {
                         Authorization: await this._getAuthorizationHeader(),
-                        Accept: 'application/json',
-                        'Content-Type': 'application/json',
+                        Accept: "application/json",
+                        "Content-Type": "application/json",
                     },
                     body: JSON.stringify({
-                        operation: allRows === true ? 'query' : 'queryAll',
+                        operation: allRows === true ? "query" : "queryAll",
                         query: query,
                     }),
                 }
@@ -154,10 +154,10 @@ export class SalesforceBulkApiClient {
             const response = await fetch(
                 `${this.instanceUrl}/services/data/v${this.apiVersion}/jobs/query/${jobId}`,
                 {
-                    method: 'GET',
+                    method: "GET",
                     headers: {
                         Authorization: await this._getAuthorizationHeader(),
-                        Accept: 'application/json',
+                        Accept: "application/json",
                     },
                 }
             );
@@ -173,9 +173,9 @@ export class SalesforceBulkApiClient {
         try {
             let jobStatus = await this.pollJobStatus(jobId);
             let jobState = jobStatus.state;
-            if (jobState === 'Failed' || jobState === 'Aborted') {
+            if (jobState === "Failed" || jobState === "Aborted") {
                 throw new Error(`Job ${jobId} failed or was aborted.`);
-            } else if (jobState !== 'JobComplete') {
+            } else if (jobState !== "JobComplete") {
                 await new Promise((resolve) =>
                     setTimeout(resolve, this.pollTime)
                 );
@@ -205,11 +205,11 @@ export class SalesforceBulkApiClient {
                 }
             }
             return fetch(url, {
-                method: 'GET',
+                method: "GET",
                 headers: {
                     Authorization: await this._getAuthorizationHeader(),
-                    Accept: 'text/csv',
-                    'Accept-Encoding': 'gzip',
+                    Accept: "text/csv",
+                    "Accept-Encoding": "gzip",
                 },
             });
         } catch (error) {
@@ -217,15 +217,15 @@ export class SalesforceBulkApiClient {
         }
     }
 
-    async writeResultsToFile(request, filename = './results.csv') {
+    async writeResultsToFile(request, filename = "./results.csv") {
         // Probably should be private
         let filewriter = new Promise((resolve, reject) => {
             const dest = fs.createWriteStream(filename);
             request.body.pipe(dest);
-            dest.on('close', () => {
+            dest.on("close", () => {
                 resolve();
             });
-            dest.on('error', (e) => {
+            dest.on("error", (e) => {
                 reject(e);
             });
         });
@@ -236,7 +236,7 @@ export class SalesforceBulkApiClient {
         jobId,
         locator = null,
         maxRecords = null,
-        filename = './results.csv'
+        filename = "./results.csv"
     ) {
         try {
             let response = await this.getJobResults_AsRequest(
@@ -258,10 +258,10 @@ export class SalesforceBulkApiClient {
             const response = await fetch(
                 `${this.instanceUrl}/services/data/v${this.apiVersion}/jobs/query/${jobId}/resultPages`,
                 {
-                    method: 'GET',
+                    method: "GET",
                     headers: {
                         Authorization: await this._getAuthorizationHeader(),
-                        Accept: 'application/json',
+                        Accept: "application/json",
                     },
                 }
             );
@@ -288,8 +288,8 @@ export class SalesforceBulkApiClient {
             await dataPipe.addToStream(
                 resp.body.pipe(dataPipe.removeCsvHeaders())
             );
-            let nextLocator = resp.headers.get('Sforce-Locator');
-            if (nextLocator && nextLocator !== 'null') {
+            let nextLocator = resp.headers.get("Sforce-Locator");
+            if (nextLocator && nextLocator !== "null") {
                 return this._retrieveJobResultsIntoPipe(
                     dataPipe,
                     jobId,
@@ -318,7 +318,7 @@ export class SalesforceBulkApiClient {
                 return this._retrieveJobResultsIntoPipe(
                     dataPipe,
                     jobId,
-                    resp.headers.get('Sforce-Locator'),
+                    resp.headers.get("Sforce-Locator"),
                     pageSize
                 );
             });
@@ -328,7 +328,7 @@ export class SalesforceBulkApiClient {
         }
     }
 
-    async bulkQuery_sequentialStream(queryString, options) {
+    async bulkQuery_sequentialStream(queryString, options = {}) {
         // Destructure the options object, providing default values
         const { allRows = false, pageSize = null } = options;
         try {
