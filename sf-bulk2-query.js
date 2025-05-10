@@ -19,38 +19,39 @@ export class SalesforceBulkApiClient {
         apiVersion = "58.0",
         creds
     ) {
-        this.salesforceInstance = salesforceInstance;
-        this.apiVersion = apiVersion;
-        this.username = creds?.username;
-        this.password = creds?.password;
-        this.securityToken = creds?.securityToken;
-        this.clientId = creds?.clientId;
-        this.clientSecret = creds?.clientSecret;
-        this.accessToken = null;
-        this.instanceUrl = null;
-        this.tokenType = null;
         this.pollTime = 10 * 1000; // 10 seconds
+
+        this._salesforceInstance = salesforceInstance;
+        this._apiVersion = apiVersion;
+        this._username = creds?.username;
+        this._password = creds?.password;
+        this._securityToken = creds?.securityToken;
+        this._clientId = creds?.clientId;
+        this._clientSecret = creds?.clientSecret;
+        this._accessToken = null;
+        this._instanceUrl = null;
+        this._tokenType = null;
     }
 
     // Login method expects SalesforceCredentials style object or nothing.
     async login(creds) {
         // Validate that credentials are set (basic check)
-        this.username = creds?.username ? creds.username : this.username;
-        this.password = creds?.password ? creds.password : this.password;
-        this.securityToken = creds?.securityToken
+        this._username = creds?.username ? creds.username : this._username;
+        this._password = creds?.password ? creds.password : this._password;
+        this._securityToken = creds?.securityToken
             ? creds.securityToken
-            : this.securityToken;
-        this.clientId = creds?.clientId ? creds.clientId : this.clientId;
-        this.clientSecret = creds?.clientSecret
+            : this._securityToken;
+        this._clientId = creds?.clientId ? creds.clientId : this._clientId;
+        this._clientSecret = creds?.clientSecret
             ? creds.clientSecret
-            : this.clientSecret;
+            : this._clientSecret;
 
         if (
-            !this.username ||
-            !this.password ||
-            !this.securityToken ||
-            !this.clientId ||
-            !this.clientSecret
+            !this._username ||
+            !this._password ||
+            !this._securityToken ||
+            !this._clientId ||
+            !this._clientSecret
         ) {
             throw new Error(
                 "Username, password, securityToken, clientId, and clientSecret are all required."
@@ -58,17 +59,17 @@ export class SalesforceBulkApiClient {
         }
 
         // Construct the full token endpoint URL
-        const tokenUrl = `${this.salesforceInstance}/services/oauth2/token`;
+        const tokenUrl = `${this._salesforceInstance}/services/oauth2/token`;
 
         // Concatenate password and security token as required by Salesforce password grant type
-        const fullPassword = this.password + this.securityToken;
+        const fullPassword = this._password + this._securityToken;
 
         // Prepare the request body (form-urlencoded)
         const params = new URLSearchParams();
         params.append("grant_type", "password");
-        params.append("client_id", this.clientId);
-        params.append("client_secret", this.clientSecret);
-        params.append("username", this.username);
+        params.append("client_id", this._clientId);
+        params.append("client_secret", this._clientSecret);
+        params.append("username", this._username);
         params.append("password", fullPassword);
 
         try {
@@ -86,9 +87,9 @@ export class SalesforceBulkApiClient {
 
             // Check if the request was successful (status code 200)
             if (response.ok && data.access_token) {
-                this.accessToken = data.access_token;
-                this.instanceUrl = data.instance_url;
-                this.tokenType = data.token_type; // Usually 'Bearer'
+                this._accessToken = data.access_token;
+                this._instanceUrl = data.instance_url;
+                this._tokenType = data.token_type; // Usually 'Bearer'
             } else {
                 // Handle errors (e.g., invalid credentials, invalid client id)
                 const errorMessage =
@@ -103,19 +104,19 @@ export class SalesforceBulkApiClient {
     }
 
     async _getAuthorizationHeader() {
-        if (!this.tokenType || !this.accessToken) {
+        if (!this._tokenType || !this._accessToken) {
             await this.login();
-            if (!this.tokenType || !this.accessToken) {
+            if (!this._tokenType || !this._accessToken) {
                 throw new Error("Failed to obtain access token.");
             }
         }
-        return `${this.tokenType} ${this.accessToken}`;
+        return `${this._tokenType} ${this._accessToken}`;
     }
 
     async executeBulkQuery(query, allRows) {
         try {
             const response = await fetch(
-                `${this.instanceUrl}/services/data/v${this.apiVersion}/jobs/query`,
+                `${this._instanceUrl}/services/data/v${this._apiVersion}/jobs/query`,
                 {
                     method: "POST",
                     headers: {
@@ -152,7 +153,7 @@ export class SalesforceBulkApiClient {
     async pollJobStatus(jobId) {
         try {
             const response = await fetch(
-                `${this.instanceUrl}/services/data/v${this.apiVersion}/jobs/query/${jobId}`,
+                `${this._instanceUrl}/services/data/v${this._apiVersion}/jobs/query/${jobId}`,
                 {
                     method: "GET",
                     headers: {
@@ -191,7 +192,7 @@ export class SalesforceBulkApiClient {
 
     async getJobResults_AsRequest(jobId, locator = null, maxRecords = null) {
         try {
-            let url = `${this.instanceUrl}/services/data/v${this.apiVersion}/jobs/query/${jobId}/results`;
+            let url = `${this._instanceUrl}/services/data/v${this._apiVersion}/jobs/query/${jobId}/results`;
             if (locator || maxRecords) {
                 url += `?`;
                 if (locator) {
@@ -256,7 +257,7 @@ export class SalesforceBulkApiClient {
     async getJobResultPages(jobId) {
         try {
             const response = await fetch(
-                `${this.instanceUrl}/services/data/v${this.apiVersion}/jobs/query/${jobId}/resultPages`,
+                `${this._instanceUrl}/services/data/v${this._apiVersion}/jobs/query/${jobId}/resultPages`,
                 {
                     method: "GET",
                     headers: {
