@@ -169,7 +169,7 @@ export class SalesforceBulkApiClient {
         }
     }
 
-    async pollJobTillComplete(jobId) {
+    async pollJobTillComplete(jobId, pollTime = null) {
         try {
             let jobStatus = await this.pollJobStatus(jobId);
             let jobState = jobStatus.state;
@@ -177,7 +177,7 @@ export class SalesforceBulkApiClient {
                 throw new Error(`Job ${jobId} failed or was aborted.`);
             } else if (jobState !== "JobComplete") {
                 await new Promise((resolve) =>
-                    setTimeout(resolve, this.pollTime)
+                    setTimeout(resolve, pollTime || this.pollTime)
                 );
                 return this.pollJobTillComplete(jobId);
             }

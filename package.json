@@ -1,6 +1,6 @@
 {
     "name": "sf-bulk2-query",
-    "version": "1.0.0",
+    "version": "1.0.001",
     "description": "Salesforce Bulk API 2.0 Query utility",
     "main": "sf-bulk2-query.js",
     "scripts": {
@@ -11,5 +11,14 @@
     "type": "module",
     "dependencies": {
         "node-fetch": "^3.3.2"
-    }
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/abight-devsanctuary/sf-bulk2-query.git"
+    },
+    "keywords": [
+        "salesforce",
+        "bulk-api",
+        "query"
+    ]
 }
