@@ -12,45 +12,71 @@ export class SalesforceCredentials {
     }
 }
 
+class FetchResponse {
+    // This class is used to wrap the fetch response and provide a consistent interface
+    // for accessing the response status, statusText, headers, and body.
+    // It is not a standard part of the fetch API, but is used here for convenience.
+    status;
+    statusText;
+    headers;
+    body;
+
+    constructor(response, body) {
+        this.status = response.status;
+        this.statusText = response.statusText;
+        const headers = {};
+        response.headers.forEach((value, name) => {
+            headers[name] = value;
+        });
+        this.headers = headers;
+        this.body = body;
+    }
+}
+
 export class SalesforceBulkApiClient {
-    // TODO migrate user, pass, token and client info into object/class
     constructor(
         salesforceInstance = "https://login.salesforce.com",
         apiVersion = "58.0",
         creds
     ) {
-        this.salesforceInstance = salesforceInstance;
-        this.apiVersion = apiVersion;
-        this.username = creds?.username;
-        this.password = creds?.password;
-        this.securityToken = creds?.securityToken;
-        this.clientId = creds?.clientId;
-        this.clientSecret = creds?.clientSecret;
-        this.accessToken = null;
-        this.instanceUrl = null;
-        this.tokenType = null;
         this.pollTime = 10 * 1000; // 10 seconds
+
+        this._salesforceInstance = salesforceInstance;
+        this._apiVersion = apiVersion;
+        this._username = creds?.username;
+        this._password = creds?.password;
+        this._securityToken = creds?.securityToken;
+        this._clientId = creds?.clientId;
+        this._clientSecret = creds?.clientSecret;
+        this._accessToken = null;
+        this._instanceUrl = null;
+        this._tokenType = null;
     }
 
-    // Login method expects SalesforceCredentials style object or nothing.
+    /*
+     * Login to Salesforce using the OAuth 2.0 Password Grant Type.
+     * @param {SalesforceCredentials} creds (Optional)
+     * @throws {Error} If any of the required credentials are missing or if the login fails.
+     * @returns {Promise<void>} Resolves when login is successful.
+     */
     async login(creds) {
         // Validate that credentials are set (basic check)
-        this.username = creds?.username ? creds.username : this.username;
-        this.password = creds?.password ? creds.password : this.password;
-        this.securityToken = creds?.securityToken
+        this._username = creds?.username ? creds.username : this._username;
+        this._password = creds?.password ? creds.password : this._password;
+        this._securityToken = creds?.securityToken
             ? creds.securityToken
-            : this.securityToken;
-        this.clientId = creds?.clientId ? creds.clientId : this.clientId;
-        this.clientSecret = creds?.clientSecret
+            : this._securityToken;
+        this._clientId = creds?.clientId ? creds.clientId : this._clientId;
+        this._clientSecret = creds?.clientSecret
             ? creds.clientSecret
-            : this.clientSecret;
+            : this._clientSecret;
 
         if (
-            !this.username ||
-            !this.password ||
-            !this.securityToken ||
-            !this.clientId ||
-            !this.clientSecret
+            !this._username ||
+            !this._password ||
+            !this._securityToken ||
+            !this._clientId ||
+            !this._clientSecret
         ) {
             throw new Error(
                 "Username, password, securityToken, clientId, and clientSecret are all required."
@@ -58,17 +84,17 @@ export class SalesforceBulkApiClient {
         }
 
         // Construct the full token endpoint URL
-        const tokenUrl = `${this.salesforceInstance}/services/oauth2/token`;
+        const tokenUrl = `${this._salesforceInstance}/services/oauth2/token`;
 
         // Concatenate password and security token as required by Salesforce password grant type
-        const fullPassword = this.password + this.securityToken;
+        const fullPassword = this._password + this._securityToken;
 
         // Prepare the request body (form-urlencoded)
         const params = new URLSearchParams();
         params.append("grant_type", "password");
-        params.append("client_id", this.clientId);
-        params.append("client_secret", this.clientSecret);
-        params.append("username", this.username);
+        params.append("client_id", this._clientId);
+        params.append("client_secret", this._clientSecret);
+        params.append("username", this._username);
         params.append("password", fullPassword);
 
         try {
@@ -86,9 +112,9 @@ export class SalesforceBulkApiClient {
 
             // Check if the request was successful (status code 200)
             if (response.ok && data.access_token) {
-                this.accessToken = data.access_token;
-                this.instanceUrl = data.instance_url;
-                this.tokenType = data.token_type; // Usually 'Bearer'
+                this._accessToken = data.access_token;
+                this._instanceUrl = data.instance_url;
+                this._tokenType = data.token_type; // Usually 'Bearer'
             } else {
                 // Handle errors (e.g., invalid credentials, invalid client id)
                 const errorMessage =
@@ -103,56 +129,48 @@ export class SalesforceBulkApiClient {
     }
 
     async _getAuthorizationHeader() {
-        if (!this.tokenType || !this.accessToken) {
+        if (!this._tokenType || !this._accessToken) {
             await this.login();
-            if (!this.tokenType || !this.accessToken) {
+            if (!this._tokenType || !this._accessToken) {
                 throw new Error("Failed to obtain access token.");
             }
         }
-        return `${this.tokenType} ${this.accessToken}`;
+        return `${this._tokenType} ${this._accessToken}`;
     }
 
-    async executeBulkQuery(query, allRows) {
-        try {
-            const response = await fetch(
-                `${this.instanceUrl}/services/data/v${this.apiVersion}/jobs/query`,
-                {
-                    method: "POST",
-                    headers: {
-                        Authorization: await this._getAuthorizationHeader(),
-                        Accept: "application/json",
-                        "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({
-                        operation: allRows === true ? "query" : "queryAll",
-                        query: query,
-                    }),
-                }
-            );
+    /*
+     * Start a bulk query job.
+     * @param {string} query - The SOQL query string.
+     * @param {boolean} allRows - Whether to include deleted and archived records.
+     * @returns {Promise<FetchResponse>} The response object containing status, statusText, headers, and body.
+     * @description This method initiates a bulk query job in Salesforce and returns the job ID via body.id.
+     */
+    async startBulkQuery(query, allRows) {
+        const response = await fetch(
+            `${this._instanceUrl}/services/data/v${this._apiVersion}/jobs/query`,
+            {
+                method: "POST",
+                headers: {
+                    Authorization: await this._getAuthorizationHeader(),
+                    Accept: "application/json",
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    operation: allRows === true ? "query" : "queryAll",
+                    query: query,
+                }),
+            }
+        );
 
-            // Include the headers in the returned object for --include functionality
-            const headers = {};
-            response.headers.forEach((value, name) => {
-                headers[name] = value;
-            });
+        const body = await response.json();
 
-            const body = await response.json();
-
-            return {
-                status: response.status,
-                statusText: response.statusText,
-                headers: headers,
-                body: body,
-            };
-        } catch (error) {
-            throw error;
-        }
+        return new FetchResponse(response, body);
     }
     //https://developer.salesforce.com/docs/atlas.en-us.api_asynch.meta/api_asynch/query_get_one_job.htm
-    async pollJobStatus(jobId) {
+    async checkJobStatus(jobId) {
         try {
             const response = await fetch(
-                `${this.instanceUrl}/services/data/v${this.apiVersion}/jobs/query/${jobId}`,
+                `${this._instanceUrl}/services/data/v${this._apiVersion}/jobs/query/${jobId}`,
                 {
                     method: "GET",
                     headers: {
@@ -163,16 +181,18 @@ export class SalesforceBulkApiClient {
             );
 
             const data = await response.json();
-            return data;
+            // return data;
+            return new FetchResponse(response, data);
         } catch (error) {
             throw error;
         }
     }
 
+    // TODO Need to make this not recursive as JS does not have tail call optimization
     async pollJobTillComplete(jobId, pollTime = null) {
         try {
-            let jobStatus = await this.pollJobStatus(jobId);
-            let jobState = jobStatus.state;
+            let { body } = await this.checkJobStatus(jobId);
+            let jobState = body.state;
             if (jobState === "Failed" || jobState === "Aborted") {
                 throw new Error(`Job ${jobId} failed or was aborted.`);
             } else if (jobState !== "JobComplete") {
@@ -189,9 +209,9 @@ export class SalesforceBulkApiClient {
 
     // async getJobResults() {}
 
-    async getJobResults_AsRequest(jobId, locator = null, maxRecords = null) {
+    async _getJobResults_AsRequest(jobId, locator = null, maxRecords = null) {
         try {
-            let url = `${this.instanceUrl}/services/data/v${this.apiVersion}/jobs/query/${jobId}/results`;
+            let url = `${this._instanceUrl}/services/data/v${this._apiVersion}/jobs/query/${jobId}/results`;
             if (locator || maxRecords) {
                 url += `?`;
                 if (locator) {
@@ -217,7 +237,7 @@ export class SalesforceBulkApiClient {
         }
     }
 
-    async writeResultsToFile(request, filename = "./results.csv") {
+    async _writeResultsToFile(request, filename = "./results.csv") {
         // Probably should be private
         let filewriter = new Promise((resolve, reject) => {
             const dest = fs.createWriteStream(filename);
@@ -232,19 +252,19 @@ export class SalesforceBulkApiClient {
         await filewriter;
     }
 
-    async getJobResults_asFile(
+    async _poc__getJobResults_asFile(
         jobId,
         locator = null,
         maxRecords = null,
         filename = "./results.csv"
     ) {
         try {
-            let response = await this.getJobResults_AsRequest(
+            let response = await this._getJobResults_AsRequest(
                 jobId,
                 locator,
                 maxRecords
             );
-            await this.writeResultsToFile(response, filename);
+            await this._writeResultsToFile(response, filename);
 
             // const data = await response.text();
             // return data;
@@ -253,10 +273,10 @@ export class SalesforceBulkApiClient {
         }
     }
 
-    async getJobResultPages(jobId) {
+    async _poc__getJobResultPages(jobId) {
         try {
             const response = await fetch(
-                `${this.instanceUrl}/services/data/v${this.apiVersion}/jobs/query/${jobId}/resultPages`,
+                `${this._instanceUrl}/services/data/v${this._apiVersion}/jobs/query/${jobId}/resultPages`,
                 {
                     method: "GET",
                     headers: {
@@ -280,7 +300,7 @@ export class SalesforceBulkApiClient {
         pageSize = null
     ) {
         try {
-            let resp = await this.getJobResults_AsRequest(
+            let resp = await this._getJobResults_AsRequest(
                 jobId,
                 locator,
                 pageSize
@@ -309,7 +329,7 @@ export class SalesforceBulkApiClient {
         try {
             let dataPipe = new StreamManager();
 
-            let resp = await this.getJobResults_AsRequest(
+            let resp = await this._getJobResults_AsRequest(
                 jobId,
                 null,
                 pageSize
@@ -328,11 +348,11 @@ export class SalesforceBulkApiClient {
         }
     }
 
-    async bulkQuery_sequentialStream(queryString, options = {}) {
+    async bulkQueryAsStream(queryString, options = {}) {
         // Destructure the options object, providing default values
         const { allRows = false, pageSize = null } = options;
         try {
-            const response = await this.executeBulkQuery(queryString, allRows);
+            const response = await this.startBulkQuery(queryString, allRows);
             if (response.status !== 200) {
                 throw new Error(
                     `Failed to execute query: ${response.statusText}`
@@ -347,55 +367,33 @@ export class SalesforceBulkApiClient {
     }
 
     async bulkQueryToFile(queryString, filename, options) {
-        // this is sequential
-        try {
-            let resp = await this.bulkQuery_sequentialStream(
-                queryString,
-                options
-            );
-            await this.writeResultsToFile({ body: resp }, filename);
-        } catch (error) {
-            throw error;
-        }
+        let resp = await this.bulkQueryAsStream(queryString, options);
+        await this._writeResultsToFile({ body: resp }, filename);
     }
 
-    async bulkQuery_AsRequest(queryString, allRows) {
-        try {
-            const response = await this.executeBulkQuery(queryString, allRows);
-            if (response.status !== 200) {
-                throw new Error(
-                    `Failed to execute query: ${response.statusText}`
-                );
-            }
-            let job_id = response.body.id;
-            await this.pollJobTillComplete(job_id);
-            return this.getJobResults_AsRequest(job_id);
-        } catch (error) {
-            throw error;
-        }
-    }
-    async bulkQuery_AsFile(queryString, filename, allRows) {
-        try {
-            const response = await this.bulkQuery_AsRequest(
-                queryString,
-                allRows
-            );
-            await this.writeResultsToFile(response, filename);
-        } catch (error) {
-            throw error;
-        }
-    }
-    async bulkQuery_AsData(queryString, allRows) {
-        try {
-            const response = await this.bulkQuery_AsRequest(
-                queryString,
-                allRows
-            );
-            const data = await response.body.text();
-            return data; // TODO update this to return as csv parsed into JSON
-        } catch (error) {
-            throw error;
-        }
+    // TODO update this to return as csv parsed into JSON
+    /*
+     * Execute a bulk query and return the results as a string.
+     * Warning: This method can cause memory issues/crash if the result set is large.
+     * @param {string} queryString - The SOQL query string.
+     * @param {object} options - Options for the query (e.g., allRows, pageSize).
+     * @returns {Promise<string>} The response body as a string.
+     */
+    async bulkQueryAsData(queryString, options = {}) {
+        const response = await this.bulkQueryAsStream(queryString, options);
+        const data = "";
+        await new Promise((resolve, reject) => {
+            response.on("data", (chunk) => {
+                data += chunk;
+            });
+            response.on("end", () => {
+                resolve();
+            });
+            response.on("error", (error) => {
+                reject(error);
+            });
+        });
+        return data; // TODO update this to return as csv parsed into JSON
     }
 }
 
