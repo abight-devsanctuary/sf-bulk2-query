@@ -1,6 +1,6 @@
 {
     "name": "sf-bulk2-query",
-    "version": "1.0.001",
+    "version": "1.0.1",
     "description": "Salesforce Bulk API 2.0 Query utility",
     "main": "sf-bulk2-query.js",
     "scripts": {
