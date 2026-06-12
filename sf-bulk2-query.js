@@ -210,6 +210,9 @@ export class SalesforceBulkApiClient {
     // async getJobResults() {}
 
     async _getJobResults_AsRequest(jobId, locator = null, maxRecords = null) {
+        if(locator === 'null') {
+            locator = null;
+        }
         try {
             let url = `${this._instanceUrl}/services/data/v${this._apiVersion}/jobs/query/${jobId}/results`;
             if (locator || maxRecords) {
