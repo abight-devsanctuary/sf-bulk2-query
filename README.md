@@ -1,169 +1,292 @@
 # SF-Bulk2-Query
 
-A Javascript module for querying with the Salesforce Bulk API 2.0
+A lightweight, zero-dependency Node.js module for executing SOQL queries using the Salesforce Bulk API 2.0.
+
+Built for Node.js 18+ using native `fetch`, `crypto`, and stream utilities.
+
+---
+
+> [!WARNING]
+> **Salesforce Authentication Deprecation Notice**
+> * **SOAP API `login()`** is disabled by default in new orgs and will be permanently retired in **Summer '27**.
+> * **OAuth 2.0 Username-Password Flow (`grant_type=password`)** is disabled by default in new Connected Apps and will be retired in **Winter '27**.
+>
+> We strongly recommend migrating to the **OAuth 2.0 Client Credentials Flow** or **JWT Bearer Flow**. Legacy username-password logins remain supported for backward compatibility, but emit a deprecation warning at runtime.
+
+---
 
 ## Features
 
--   Authenticate with Salesforce using username, password, security token, client key and secret.
+- **Modern OAuth 2.0 Support**:
+  - **Client Credentials Flow** (Recommended for server-to-server / ETL)
+  - **JWT Bearer Token Flow** (RFC 7523 - Enterprise headless & CI/CD)
+  - **Direct Access Token Injection** (AWS Lambda, Next.js, `@salesforce/cli`)
+  - **Refresh Token Flow** (Long-running background workers)
+  - **PKCE & Web Server Flow Utilities** (Interactive web/CLI apps)
+  - **Legacy Username-Password Flow** (Retained with deprecation warning)
+- **Automatic Token Refresh**: Seamlessly refreshes expired session tokens on `401 Unauthorized` during long-running bulk queries without failing the job.
+- **Zero External Dependencies**: Pure Node.js 18+ utilizing native `fetch`, `node:crypto`, and `node:stream`.
+- **Flexible Results Handling**: Retrieve Bulk API 2.0 results as a sequential stream, write directly to disk, or read as parsed data.
 
--   Execute SOQL queries using the Bulk API 2.0.
-
--   Retrieve job results as a stream, file, or raw data.
+---
 
 ## Installation
 
+```bash
 npm install sf-bulk2-query
-
-## Usage
-
-### Salesforce Credentials Class
-
-Represents the credentials needed to connect to Salesforce.
-
 ```
-import { SalesforceCredentials } from 'sf-bulk2-query';
+
+*Requirements: Node.js 18.0.0 or higher.*
+
+---
+
+## Quick Start (Client Credentials Flow - Recommended)
+
+The **Client Credentials Flow** is the modern Salesforce standard for headless, backend, and ETL integrations via **External Client Apps**.
+
+```javascript
+import SalesforceBulkApiClient from 'sf-bulk2-query';
+
+const client = new SalesforceBulkApiClient({
+  salesforceInstance: 'https://mycompany.my.salesforce.com', // Your My Domain URL
+  apiVersion: '60.0',
+  auth: {
+    type: 'client_credentials',
+    clientId: process.env.SF_CLIENT_ID,
+    clientSecret: process.env.SF_CLIENT_SECRET,
+  },
+});
+
+// Download accounts to a local CSV file
+await client.bulkQueryToFile('SELECT Id, Name, Industry FROM Account', './accounts.csv');
+```
+
+---
+
+## Authentication Methods
+
+### 1. OAuth 2.0 Client Credentials Flow
+Best for server-to-server background services and automated batch jobs.
+
+```javascript
+import SalesforceBulkApiClient from 'sf-bulk2-query';
+
+const client = new SalesforceBulkApiClient({
+  salesforceInstance: 'https://mycompany.my.salesforce.com',
+  auth: {
+    type: 'client_credentials',
+    clientId: 'YOUR_EXTERNAL_CLIENT_APP_CLIENT_ID',
+    clientSecret: 'YOUR_EXTERNAL_CLIENT_APP_CLIENT_SECRET',
+    // Optional: useBasicAuth: true to pass credentials in the Authorization header
+  },
+});
+
+await client.login();
+```
+
+*Salesforce Setup*: Create an **External Client App** in Setup > App Manager. Enable the Client Credentials Flow and assign a configured Run-As integration user with required permissions.
+
+---
+
+### 2. OAuth 2.0 JWT Bearer Token Flow (RFC 7523)
+Best for enterprise automated integrations and CI/CD pipelines using digital certificates.
+
+```javascript
+import fs from 'node:fs';
+import SalesforceBulkApiClient from 'sf-bulk2-query';
+
+const privateKey = fs.readFileSync('./salesforce.key', 'utf8');
+
+const client = new SalesforceBulkApiClient({
+  salesforceInstance: 'https://login.salesforce.com', // or test.salesforce.com or My Domain
+  auth: {
+    type: 'jwt_bearer',
+    clientId: process.env.SF_CLIENT_ID,
+    username: 'integration.user@example.com',
+    privateKey: privateKey, // PEM string, Buffer, or use `privateKeyPath: './salesforce.key'`
+  },
+});
+
+await client.login();
+```
+
+*Salesforce Setup*: In Setup > App Manager, create a Connected App or External Client App. Check "Use digital signatures", upload your public certificate (`.crt`), and set OAuth policy to "Admin approved users are pre-authorized".
+
+---
+
+### 3. Pre-Authenticated Access Token (Direct Session)
+Best for serverless functions (AWS Lambda), web applications, or CLI scripts where the access token was already acquired externally (e.g. from `@salesforce/cli`).
+
+```javascript
+import SalesforceBulkApiClient from 'sf-bulk2-query';
+
+const client = new SalesforceBulkApiClient({
+  auth: {
+    type: 'access_token',
+    accessToken: 'YOUR_ACCESS_TOKEN_OR_SESSION_ID',
+    instanceUrl: 'https://mycompany.my.salesforce.com',
+  },
+});
+
+// No need to call client.login()!
+const stream = await client.bulkQueryAsStream('SELECT Id, Name FROM Contact');
+```
+
+You can also provide an `onRefresh` callback to dynamically re-fetch tokens:
+```javascript
+const client = new SalesforceBulkApiClient({
+  auth: {
+    type: 'access_token',
+    accessToken: currentToken,
+    instanceUrl: 'https://mycompany.my.salesforce.com',
+    onRefresh: async () => {
+      const refreshed = await fetchTokenFromSecretManager();
+      return { accessToken: refreshed.token };
+    },
+  },
+});
+```
+
+---
+
+### 4. OAuth 2.0 Refresh Token Flow
+Best for long-running daemons that have already received an offline refresh token from an initial user authorization.
+
+```javascript
+import SalesforceBulkApiClient from 'sf-bulk2-query';
+
+const client = new SalesforceBulkApiClient({
+  salesforceInstance: 'https://login.salesforce.com',
+  auth: {
+    type: 'refresh_token',
+    clientId: process.env.SF_CLIENT_ID,
+    clientSecret: process.env.SF_CLIENT_SECRET, // optional depending on app settings
+    refreshToken: process.env.SF_REFRESH_TOKEN,
+  },
+});
+
+await client.login();
+```
+
+---
+
+### 5. Authorization Code Flow with PKCE Utilities
+For web apps or CLI tools requiring user interaction, this package exports PKCE generation and token exchange helpers:
+
+```javascript
+import {
+  generatePkceChallenge,
+  getAuthorizationUrl,
+  exchangeCodeForTokens,
+} from 'sf-bulk2-query';
+
+// Step 1: Generate PKCE challenge
+const { codeVerifier, codeChallenge } = generatePkceChallenge();
+
+// Step 2: Build the authorization URL and redirect the user
+const authUrl = getAuthorizationUrl({
+  clientId: 'YOUR_CLIENT_ID',
+  redirectUri: 'https://localhost:3000/callback',
+  codeChallenge: codeChallenge,
+});
+console.log('Open this URL to authorize:', authUrl);
+
+// Step 3: In your callback handler, exchange code for tokens
+const tokenResponse = await exchangeCodeForTokens({
+  code: callbackCode,
+  clientId: 'YOUR_CLIENT_ID',
+  redirectUri: 'https://localhost:3000/callback',
+  codeVerifier: codeVerifier,
+});
+
+// Step 4: Initialize client with returned session
+const client = new SalesforceBulkApiClient({
+  auth: {
+    accessToken: tokenResponse.access_token,
+    instanceUrl: tokenResponse.instance_url,
+  },
+});
+```
+
+---
+
+### 6. Legacy Username & Password Flow (Deprecated)
+Maintained for backwards compatibility. Will log a deprecation warning alerting you of Salesforce's Winter '27 retirement.
+
+```javascript
+import SalesforceBulkApiClient, { SalesforceCredentials } from 'sf-bulk2-query';
 
 const creds = new SalesforceCredentials(
-'your_username',
-'your_password',
-'your_security_token',
-'your_client_id',
-'your_client_secret'
+  'username@example.com',
+  'password',
+  'security_token',
+  'client_id',
+  'client_secret'
 );
-```
-
-### Bulk API Client
-
-```
-import SalesforceBulkApiClient from 'sf-bulk2-query';
 
 const client = new SalesforceBulkApiClient('https://login.salesforce.com', '58.0', creds);
 await client.login();
-await client.bulkQueryToFile('SELECT Id, Name FROM Account', './accounts.csv');
 ```
 
-## API Documentation
+---
+
+## API Reference
 
 ### Constructor
 
-`const client = new SalesforceBulkApiClient(salesforceInstance, apiVersion, creds);`
+```javascript
+// Modern options-object signature:
+const client = new SalesforceBulkApiClient(options);
 
-##### salesforceInstance
+// Legacy 3-argument signature:
+const client = new SalesforceBulkApiClient(salesforceInstance, apiVersion, creds);
+```
 
-The URL of your Salesforce instance (e.g., 'https://login.salesforce.com' or 'https://yourinstance.my.salesforce.com').
+#### Options Object
+* `salesforceInstance` *(string)*: Salesforce instance URL (e.g. `'https://login.salesforce.com'` or `'https://mycompany.my.salesforce.com'`). Defaults to `'https://login.salesforce.com'`.
+* `apiVersion` *(string)*: Salesforce Bulk API version (e.g. `'60.0'`). Defaults to `'58.0'`.
+* `pollTime` *(number)*: Job polling interval in milliseconds. Defaults to `10000` (10 seconds).
+* `auth` *(object)*: Authentication configuration (see examples above).
 
-Defaults to 'https://login.salesforce.com'.
-
-##### apiVersion
-
-The Salesforce API version to use. Defaults to '58.0'.
-
-##### creds
-
-An instance of **SalesforceCredentials**.
-
-### Attibutes
-
-#### pollTime
-
-The frequncy of job polling in milliseconds. Defaults to 10 seconds
+---
 
 ### Methods
 
-#### login (async) : void
+#### `login([creds]): Promise<AuthResult>`
+Authenticates with Salesforce using the configured strategy. Not required if initialized with `auth.type: 'access_token'`.
 
-`await client.login(creds);`
+#### `bulkQueryAsStream(query, [options]): Promise<Readable>`
+Executes a SOQL query using Bulk API 2.0 and returns a readable stream emitting CSV chunks.
+* `options.allRows` *(boolean)*: If `true`, queries deleted and archived records (`queryAll`).
+* `options.pageSize` *(number)*: Chunk size for pulling results.
 
-##### creds
+#### `bulkQueryToFile(query, filename, [options]): Promise<void>`
+Executes a SOQL query and writes the complete CSV output to the specified local file path.
 
-Optional: An instance of **SalesforceCredentials**.
+#### `bulkQueryAsData(query, [options]): Promise<string>`
+Executes a SOQL query and buffers the full CSV result into a string in memory.
 
-If creds are provided then it will use the newly passes credentials, else it will used those passed during the constructor. If there are no creds an error will be thrown.
+#### `startBulkQuery(query, [allRows]): Promise<FetchResponse>`
+Starts a Bulk API 2.0 job and returns `{ status, statusText, headers, body }`. `body.id` contains the Salesforce Job ID.
 
-#### async bulkQueryAsStream(query, options) : stream
-`let dataStream = await client.bulkQueryAsStream(query, options);`
-##### query
-A SOQL Query
-##### options
-Defaults to `{ allRows = false, pageSize = null }`
-###### allRows
-Optional: Boolean
-If passed True then will use the all rows flag to the bulk api allowing the return of deleted and archived data.
-###### pageSize
-Optional: Integer  
-If passed will pull results in chunks the size of the int.
+#### `checkJobStatus(jobId): Promise<FetchResponse>`
+Checks the current processing state of a bulk job.
 
-#### async bulkQueryToFile(query, filename, options) : void
-`let dataStream = await client.bulkQueryToFile(query, filename, options);`
-##### query
-A SOQL Query
-##### filename
-A file path for writing the results to disk.
+#### `pollJobTillComplete(jobId, [pollTime]): Promise<string>`
+Polls until the job status reaches `'JobComplete'`, or throws if `'Failed'` / `'Aborted'`.
 
-Will override an existing file.
-##### options
-Defaults to `{ allRows = false, pageSize = null }`
-###### allRows
-Optional: Boolean
-If passed True then will use the all rows flag to the bulk api allowing the return of deleted and archived data.
-###### pageSize
-Optional: Integer  
-If passed will pull results in chunks the size of the int.
+---
 
-### Advanced Methods
-#### startBulkQuery (async) : request
+## Running Tests
 
-`let resp = await client.startBulkQuery(query, allRows);`
-
-##### query
-
-A SOQL Query
-
-##### allRows
-
-Optional: Boolean.  
-If passed True then will use the all rows flag to the bulk api allowing the return of deleted and archived data.
-
-##### resp
-
-```
-{
-    status,
-    statusText,
-    headers,
-    body
-}
+```bash
+npm test
 ```
 
-#### checkJobStatus (async) : response
+Runs all unit tests with Node.js's built-in test runner.
 
-`let resp = await client.checkJobStatus(jobId);`
+---
 
-##### jobId
+## License
 
-Salesforce Bulk API Job Id - Returned from `executeBulkQuery` `body.id`
-
-##### resp
-
-fetch response.json()
-
-#### pollJobTillComplete (async) : response
-
-`let resp = await client.pollJobTillComplete(jobId, pollTime);`
-
-##### jobId
-
-Salesforce Bulk API Job Id - Returned from `executeBulkQuery` `body.id`
-
-##### pollTime
-
-Optional : Time in milliseconds. If not passed defaults to client.pollTime
-
-##### resp
-
-The jobs state as defined https://developer.salesforce.com/docs/atlas.en-us.api_asynch.meta/api_asynch/query_get_one_job.htm
-
-#### retrieveJobResults_sequentialStream (async) : stream
-`let resp = await client.retrieveJobResults_sequentialStream(jobId);`
-
-Returns a data stream that will pipe the csv like text as the results are retrieved.
+MIT

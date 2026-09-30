@@ -1,17 +1,24 @@
 {
     "name": "sf-bulk2-query",
-    "version": "1.0.2",
-    "description": "Salesforce Bulk API 2.0 Query utility",
+    "version": "1.1.0",
+    "description": "Salesforce Bulk API 2.0 Query utility with modern OAuth 2.0 authentication",
     "main": "sf-bulk2-query.js",
-    "scripts": {
-        "test": "echo \"Error: no test specified\" && exit 1"
+    "types": "./sf-bulk2-query.d.ts",
+    "type": "module",
+    "exports": {
+        ".": "./sf-bulk2-query.js",
+        "./auth": "./auth/index.js",
+        "./StreamManager": "./StreamManager.js"
     },
+    "scripts": {
+        "test": "node --test test/**/*.test.js"
+    },
+    "engines": {
+        "node": ">=18.0.0"
+    },
+    "dependencies": {},
     "author": "",
     "license": "MIT",
-    "type": "module",
-    "dependencies": {
-        "node-fetch": "^3.3.2"
-    },
     "repository": {
         "type": "git",
         "url": "https://github.com/abight-devsanctuary/sf-bulk2-query.git"
@@ -19,6 +26,10 @@
     "keywords": [
         "salesforce",
         "bulk-api",
-        "query"
+        "query",
+        "oauth2",
+        "client-credentials",
+        "jwt",
+        "pkce"
     ]
 }
