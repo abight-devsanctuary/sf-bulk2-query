@@ -1,6 +1,6 @@
 {
     "name": "sf-bulk2-query",
-    "version": "1.1.0",
+    "version": "2.0.1",
     "description": "Salesforce Bulk API 2.0 Query utility with modern OAuth 2.0 authentication",
     "main": "sf-bulk2-query.js",
     "types": "./sf-bulk2-query.d.ts",
