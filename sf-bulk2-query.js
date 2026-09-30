@@ -488,12 +488,17 @@ export class SalesforceBulkApiClient {
         }
 
         dataPipe.addToStream(bodyStream).then(() => {
-            return this._retrieveJobResultsIntoPipe(
-                dataPipe,
-                jobId,
-                resp.headers.get('Sforce-Locator'),
-                pageSize
-            );
+            const locator = resp.headers?.get ? resp.headers.get('Sforce-Locator') : null;
+            if (locator && locator !== 'null') {
+                return this._retrieveJobResultsIntoPipe(
+                    dataPipe,
+                    jobId,
+                    locator,
+                    pageSize
+                );
+            } else {
+                return dataPipe.closeStream();
+            }
         });
 
         return dataPipe.getInternalStream();
